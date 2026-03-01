@@ -4,7 +4,7 @@
 # Description: Automated WiFi Security Auditing Tool for Arch/Hyprland
 # Hardware:    Hardware Agnostic (Auto-detects Intel/Atheros/Realtek)
 # Author:      Elite DevOps
-# Version:     2.2.0 (Rescan Added)
+# Version:     2.2.1 (Bugfixes)
 # Requires:    Bash 5.0+
 # -----------------------------------------------------------------------------
 
@@ -234,6 +234,7 @@ check_deps() {
     declare -A deps=(
         ["aircrack-ng"]="aircrack-ng"
         ["bully"]="bully"
+        ["wash"]="reaver"
         ["gawk"]="gawk"
         ["lspci"]="pciutils"
         ["timeout"]="coreutils"
@@ -733,7 +734,7 @@ get_connected_clients() {
         local attempts=0
         while [[ ! -f "$custom_csv" ]] && ((attempts < 5)); do
             sleep 1
-            ((attempts++))
+            ((++attempts))
         done
         [[ -f "$custom_csv" ]] && source_csv="$custom_csv"
     fi
@@ -875,7 +876,7 @@ attack_wpa_handshake() {
             printf '\n'
             log_info "Step 2: Sending Deauth Packets"
             
-            # L3: Deauth attack loop
+            # Deauth attack loop
             while true; do
                 local burst=1 # Change this value to adjust burst size
                 log_info "Sending $burst groups of deauth packets..."
@@ -891,28 +892,35 @@ attack_wpa_handshake() {
                 printf '\n'
                 log_success "Deauth burst complete."
                 printf "Check your other terminal for 'WPA Handshake: ...'\n"
-                
-                printf 'Options:\n'
-                printf 'y) Yes, captured - Start Cracking\n'
-                printf 'n) No, stop attack\n'
-                printf 'r) Retry Deauth (Send more packets)\n'
-                printf 'b) Back to Client Selection\n'
-                printf 't) Back to Target (Network) Selection\n'
-                
-                local cap_choice
-                read -r -p "Choice [y/n/r/b/t] (Default: r): " cap_choice
-                cap_choice="${cap_choice:-r}"
-                
-                case "${cap_choice,,}" in
-                    y) break 2 ;;   # exit L3 + L2 → cracking section
-                    b) break ;;     # exit L3 → back to L2 (client selection)
-                    t) return 2 ;;  # exit function → rescan networks
-                    r) continue ;;  # stay in L3 → retry deauth
-                    *)
-                        log_info "Aborting attack."
-                        return 0
-                        ;;
-                esac
+
+                # Menu prompt loop (typo-safe re-prompt)
+                while true; do
+                    printf 'Options:\n'
+                    printf 'y) Yes, captured - Start Cracking\n'
+                    printf 'n) No, stop attack\n'
+                    printf 'r) Retry Deauth (Send more packets)\n'
+                    printf 'b) Back to Client Selection\n'
+                    printf 't) Back to Target (Network) Selection\n'
+                    
+                    local cap_choice
+                    read -r -p "Choice [y/n/r/b/t] (Default: r): " cap_choice
+                    cap_choice="${cap_choice:-r}"
+                    
+                    case "${cap_choice,,}" in
+                        y) break 3 ;;   # exit menu + deauth + client selection → cracking
+                        n)
+                            log_info "Aborting attack."
+                            return 0
+                            ;;
+                        b) break 2 ;;   # exit menu + deauth → back to client selection
+                        t) return 2 ;;  # exit function → rescan networks
+                        r) break ;;     # exit menu → top of deauth loop (re-send)
+                        *)
+                            log_warn "Invalid option. Please try again."
+                            continue    # re-prompt within menu loop
+                            ;;
+                    esac
+                done
             done
         done
         
@@ -927,11 +935,11 @@ attack_wpa_handshake() {
         fi
 
         if [[ -f "$cap_file" ]]; then
-            chown "$REAL_USER":"$REAL_GROUP" -- "$cap_file" 2>/dev/null || true
-            log_info "Capture file ownership transferred to $REAL_USER."
+            chown "$REAL_USER":"$REAL_GROUP" -- "${capture_base}"* 2>/dev/null || true
+            log_info "Capture files ownership transferred to $REAL_USER."
         fi
 
-        # L2: Crack attempt loop
+        # Crack attempt loop
         while true; do
             if [[ -n "${FINAL_WORDLIST:-}" && -f "${FINAL_WORDLIST:-}" && -f "$cap_file" ]]; then
                 log_info "Step 3: Cracking Password..."
@@ -1001,7 +1009,7 @@ attack_wps() {
     log_info "Attempting WPS PIXIE/Bruteforce via 'bully'..."
     log_warn "This may take a very long time. Press Ctrl+C to abort."
     
-    bully -b "$TARGET_BSSID" -c "$TARGET_CH" -- "$MON_IFACE" -v 3 || {
+    bully -b "$TARGET_BSSID" -c "$TARGET_CH" -v 3 -- "$MON_IFACE" || {
         log_warn "Bully exited with error or was interrupted."
     }
 }
@@ -1013,7 +1021,7 @@ main() {
     printf '========================================\n'
     printf '   Arch/Hyprland Wi-Fi Security Audit   \n'
     printf '========================================\n'
-    printf 'Version: 2.2.0 (Rescan Added) | PID: %d\n' "$$"
+    printf 'Version: 2.2.1 (Bugfixes) | PID: %d\n' "$$"
     printf '\n'
 
     check_deps
