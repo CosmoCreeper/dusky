@@ -1511,6 +1511,23 @@ pages:
                       command: kitty --class dusky_appearances.sh --hold sh -c "$HOME/user_scripts/hypr/dusky_appearances.sh"
             - type: button
               properties:
+                title: Workspace Rules
+                description: Configure Workspace Rules
+                icon: applications-graphics-symbolic
+                buttons:
+                  - icon: text-x-script-symbolic
+                    button_text: "File"
+                    on_press:
+                      type: exec
+                      command: gnome-text-editor "$HOME/.config/hypr/edit_here/source/workspace_rules.conf"
+                  - icon: applications-graphics-symbolic
+                    button_text: "TUI"
+                    style: suggested
+                    on_press:
+                      type: exec
+                      command: kitty --class dusky_workspace_manager.sh --hold sh -c "$HOME/user_scripts/hypr/dusky_workspace_manager.sh"
+            - type: button
+              properties:
                 title: Hypridle
                 description: Edit idle daemon config
                 icon: preferences-system-time-symbolic

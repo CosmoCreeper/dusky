@@ -315,6 +315,115 @@ EOF
 # This file can also be edited with dusky workspace manager tui, 
 # which can be found in dusky control center
 # ==============================================================================
+# Managed by Dusky TUI
+# ==============================================================================
+
+# --- Global Rules ---
+$global_layout = dwindle
+workspace = r[11-99], layout:$global_layout
+
+# --- Ephemeral Global Override (Resets on reboot) ---
+$ephemeral_layout = monocle
+$ephemeral_enabled = false
+
+# --- Smart Gaps (Applied to workspaces with only 1 window) ---
+$smart_gaps_in = 0
+$smart_gaps_out = 0
+$smart_border = 0
+workspace = w[tv1], gapsin:$smart_gaps_in, gapsout:$smart_gaps_out, bordersize:$smart_border
+workspace = f[1], gapsin:$smart_gaps_in, gapsout:$smart_gaps_out, bordersize:$smart_border
+
+# --- Individual Workspaces (1-10) ---
+$ws1_layout = dwindle
+$ws1_persistent = false
+$ws1_master_orient = left
+$ws1_scroll_dir = right
+$ws1_bordersize = 2
+$ws1_gapsin = 6
+$ws1_gapsout = 12
+workspace = 1, layout:$ws1_layout, persistent:$ws1_persistent, layoutopt:orientation:$ws1_master_orient, layoutopt:direction:$ws1_scroll_dir, bordersize:$ws1_bordersize, gapsin:$ws1_gapsin, gapsout:$ws1_gapsout
+
+$ws2_layout = dwindle
+$ws2_persistent = false
+$ws2_master_orient = left
+$ws2_scroll_dir = right
+$ws2_bordersize = 2
+$ws2_gapsin = 6
+$ws2_gapsout = 12
+workspace = 2, layout:$ws2_layout, persistent:$ws2_persistent, layoutopt:orientation:$ws2_master_orient, layoutopt:direction:$ws2_scroll_dir, bordersize:$ws2_bordersize, gapsin:$ws2_gapsin, gapsout:$ws2_gapsout
+
+$ws3_layout = dwindle
+$ws3_persistent = false
+$ws3_master_orient = left
+$ws3_scroll_dir = right
+$ws3_bordersize = 2
+$ws3_gapsin = 6
+$ws3_gapsout = 12
+workspace = 3, layout:$ws3_layout, persistent:$ws3_persistent, layoutopt:orientation:$ws3_master_orient, layoutopt:direction:$ws3_scroll_dir, bordersize:$ws3_bordersize, gapsin:$ws3_gapsin, gapsout:$ws3_gapsout
+
+$ws4_layout = dwindle
+$ws4_persistent = false
+$ws4_master_orient = left
+$ws4_scroll_dir = right
+$ws4_bordersize = 2
+$ws4_gapsin = 6
+$ws4_gapsout = 12
+workspace = 4, layout:$ws4_layout, persistent:$ws4_persistent, layoutopt:orientation:$ws4_master_orient, layoutopt:direction:$ws4_scroll_dir, bordersize:$ws4_bordersize, gapsin:$ws4_gapsin, gapsout:$ws4_gapsout
+
+$ws5_layout = dwindle
+$ws5_persistent = false
+$ws5_master_orient = left
+$ws5_scroll_dir = right
+$ws5_bordersize = 2
+$ws5_gapsin = 6
+$ws5_gapsout = 12
+workspace = 5, layout:$ws5_layout, persistent:$ws5_persistent, layoutopt:orientation:$ws5_master_orient, layoutopt:direction:$ws5_scroll_dir, bordersize:$ws5_bordersize, gapsin:$ws5_gapsin, gapsout:$ws5_gapsout
+
+$ws6_layout = dwindle
+$ws6_persistent = false
+$ws6_master_orient = left
+$ws6_scroll_dir = right
+$ws6_bordersize = 2
+$ws6_gapsin = 6
+$ws6_gapsout = 12
+workspace = 6, layout:$ws6_layout, persistent:$ws6_persistent, layoutopt:orientation:$ws6_master_orient, layoutopt:direction:$ws6_scroll_dir, bordersize:$ws6_bordersize, gapsin:$ws6_gapsin, gapsout:$ws6_gapsout
+
+$ws7_layout = dwindle
+$ws7_persistent = false
+$ws7_master_orient = left
+$ws7_scroll_dir = right
+$ws7_bordersize = 2
+$ws7_gapsin = 6
+$ws7_gapsout = 12
+workspace = 7, layout:$ws7_layout, persistent:$ws7_persistent, layoutopt:orientation:$ws7_master_orient, layoutopt:direction:$ws7_scroll_dir, bordersize:$ws7_bordersize, gapsin:$ws7_gapsin, gapsout:$ws7_gapsout
+
+$ws8_layout = dwindle
+$ws8_persistent = false
+$ws8_master_orient = left
+$ws8_scroll_dir = right
+$ws8_bordersize = 2
+$ws8_gapsin = 6
+$ws8_gapsout = 12
+workspace = 8, layout:$ws8_layout, persistent:$ws8_persistent, layoutopt:orientation:$ws8_master_orient, layoutopt:direction:$ws8_scroll_dir, bordersize:$ws8_bordersize, gapsin:$ws8_gapsin, gapsout:$ws8_gapsout
+
+$ws9_layout = dwindle
+$ws9_persistent = false
+$ws9_master_orient = left
+$ws9_scroll_dir = right
+$ws9_bordersize = 2
+$ws9_gapsin = 6
+$ws9_gapsout = 12
+workspace = 9, layout:$ws9_layout, persistent:$ws9_persistent, layoutopt:orientation:$ws9_master_orient, layoutopt:direction:$ws9_scroll_dir, bordersize:$ws9_bordersize, gapsin:$ws9_gapsin, gapsout:$ws9_gapsout
+
+$ws10_layout = dwindle
+$ws10_persistent = false
+$ws10_master_orient = left
+$ws10_scroll_dir = right
+$ws10_bordersize = 2
+$ws10_gapsin = 6
+$ws10_gapsout = 12
+workspace = 10, layout:$ws10_layout, persistent:$ws10_persistent, layoutopt:orientation:$ws10_master_orient, layoutopt:direction:$ws10_scroll_dir, bordersize:$ws10_bordersize, gapsin:$ws10_gapsin, gapsout:$ws10_gapsout
+
 EOF
             ;;
         "environment_variables.conf")
