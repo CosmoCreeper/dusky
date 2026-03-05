@@ -41,12 +41,70 @@ create_configs() {
 execute "Generate default Snapper configs" create_configs
 
 isolate_subvolumes() {
-    # Validate required structures before destructive operations
+    # 1. Validate and Guide fstab configuration
     if ! grep -qE '^\s*[^#].*\s+/.snapshots\s+' /etc/fstab; then
-        echo "FATAL: No fstab entry found for /.snapshots. Ensure @snapshots is mapped." >&2
-        return 1
+        if [[ "$AUTO_MODE" == true ]]; then
+            echo "FATAL: Missing /.snapshots entry in /etc/fstab. Cannot resolve interactively in --auto mode." >&2
+            return 1
+        fi
+        
+        echo -e "\n\033[1;33m[ACTION REQUIRED]\033[0m Missing /.snapshots entry in /etc/fstab!"
+        echo "To fix this without breaking your specific mount options, please do the following:"
+        echo "  1. Open a new terminal and run: sudo nano /etc/fstab (or your preferred editor)"
+        echo "  2. Copy the line used for your root (/) partition."
+        echo "  3. Paste it twice at the bottom."
+        echo "  4. Change the mount point of the first copied line to: /.snapshots"
+        echo "  5. Change its subvol option to: subvol=/@snapshots"
+        echo "  6. Change the mount point of the second copied line to: /home/.snapshots"
+        echo "  7. Change its subvol option to: subvol=/@home_snapshots"
+        echo "  8. Save and exit."
+        read -rp "Press [Enter] once you have updated /etc/fstab to continue..." || true
+        
+        if ! grep -qE '^\s*[^#].*\s+/.snapshots\s+' /etc/fstab; then
+            echo "FATAL: Still no fstab entry found for /.snapshots. Aborting." >&2
+            return 1
+        fi
+        sudo systemctl daemon-reload
+        echo "Systemd daemon reloaded successfully."
     fi
 
+    # 2. Validate and Create BTRFS top-level subvolumes if missing
+    local root_dev
+    root_dev=$(findmnt -fno SOURCE / | sed 's/\[.*\]//')
+    local missing_snapshots=false
+    local missing_home_snapshots=false
+    
+    if ! sudo btrfs subvolume list / | grep -q ' path @snapshots$'; then missing_snapshots=true; fi
+    if ! sudo btrfs subvolume list / | grep -q ' path @home_snapshots$'; then missing_home_snapshots=true; fi
+    
+    if [[ "$missing_snapshots" == true || "$missing_home_snapshots" == true ]]; then
+        local do_create=true
+        if [[ "$AUTO_MODE" == false ]]; then
+            echo -e "\n\033[1;33m[NOTICE]\033[0m One or more required top-level BTRFS subvolumes (@snapshots, @home_snapshots) are missing."
+            read -rp "Would you like to automatically create them now? [Y/n] " create_resp || true
+            if [[ ! "${create_resp,,}" =~ ^(y|yes|)$ ]]; then
+                do_create=false
+            fi
+        fi
+        
+        if [[ "$do_create" == true ]]; then
+            local tmp_mnt
+            tmp_mnt=$(mktemp -d)
+            sudo mount -o subvolid=5 "$root_dev" "$tmp_mnt" || { echo "FATAL: Failed to mount BTRFS top-level." >&2; rmdir "$tmp_mnt"; return 1; }
+            
+            [[ "$missing_snapshots" == true ]] && sudo btrfs subvolume create "$tmp_mnt/@snapshots"
+            [[ "$missing_home_snapshots" == true ]] && sudo btrfs subvolume create "$tmp_mnt/@home_snapshots"
+            
+            sudo umount "$tmp_mnt"
+            rmdir "$tmp_mnt"
+            echo "Top-level subvolumes verified/created successfully."
+        else
+            echo "FATAL: Cannot proceed without the required top-level subvolumes." >&2
+            return 1
+        fi
+    fi
+
+    # 3. Proceed with standard isolation operations
     for snap_dir in /.snapshots /home/.snapshots; do
         if mountpoint -q "$snap_dir" 2>/dev/null; then
             echo "INFO: $snap_dir is currently mounted. Skipping subvolume deletion to protect data."
