@@ -10,6 +10,7 @@ Usage:
     audio_router.py --daemon [APP]      # background routing daemon
     audio_router.py --status            # print daemon status
     audio_router.py --stop              # stop running daemon
+    audio_router.py --waybar            # output Waybar JSON status
 """
 
 from __future__ import annotations
@@ -849,8 +850,13 @@ def _try_libadwaita_popup(running: bool, status: dict | None, apps: list[str]) -
         header = Adw.HeaderBar()
         box.append(header)
 
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scrolled.set_vexpand(True)
+        box.append(scrolled)
+
         clamp = Adw.Clamp(maximum_size=400)
-        box.append(clamp)
+        scrolled.set_child(clamp)
 
         content = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
@@ -1268,6 +1274,35 @@ def cli_stop() -> None:
         sys.exit(1)
 
 
+def cli_waybar() -> None:
+    """Output JSON formatted for a Waybar custom module."""
+    if not daemon_is_running():
+        print(json.dumps({
+            "text": "󰍭",
+            "tooltip": "Routing daemon stopped",
+            "class": "inactive"
+        }))
+        return
+
+    resp = ipc_send({"action": "status"})
+    if resp and resp.get("ok"):
+        data = resp.get("data", {})
+        target = data.get("target", "Unknown")
+        links = data.get("active_links", 0)
+        print(json.dumps({
+            "text": "󰍬",
+            "tooltip": f"Routing: {target}\nActive Links: {links}",
+            "class": "active"
+        }))
+    else:
+        # Fallback if IPC fails but daemon exists
+        print(json.dumps({
+            "text": "󰍬",
+            "tooltip": "Routing daemon running (status unknown)",
+            "class": "active"
+        }))
+
+
 # ──────────────────────────────────────────────────────────────────
 # Entry point
 # ──────────────────────────────────────────────────────────────────
@@ -1289,6 +1324,9 @@ def main() -> None:
 
         case "--stop":
             cli_stop()
+
+        case "--waybar":
+            cli_waybar()
 
         case "--help" | "-h":
             print(__doc__)
