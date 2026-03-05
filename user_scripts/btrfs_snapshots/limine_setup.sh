@@ -147,8 +147,8 @@ register_efi() {
     # Idempotency: Avoid NVRAM wear if entry already exists perfectly
     local existing_entries
     existing_entries=$(sudo efibootmgr | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)[* ] Limine$/\1/p')
-    local count
-    count=$(echo "$existing_entries" | grep -c . || echo 0)
+    local count=0
+    [[ -n "$existing_entries" ]] && count=$(wc -l <<< "$existing_entries")
 
     if (( count == 1 )); then
         echo "INFO: Single Limine NVRAM entry already exists. Skipping recreation."
