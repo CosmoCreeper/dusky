@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Hyprshade Selector - Interactive shader picker with live preview
-# Requires: bash 4.3+, rofi, hyprshade
+# Requires: rofi, hyprshade
 #
 
 # -----------------------------------------------------------------------------

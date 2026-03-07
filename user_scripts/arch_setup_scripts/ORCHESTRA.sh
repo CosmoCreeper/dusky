@@ -19,7 +19,7 @@
 SCRIPT_SEARCH_DIRS=(
     "${HOME}/user_scripts/arch_setup_scripts/scripts"
     "${HOME}/user_scripts/arch_setup_scripts"
-    "${HOME}/user_scripts/theme_matugen"
+    "${HOME}/user_scripts/rofi"
     # "${HOME}/my_other_scripts"
     # "/opt/shared_team_scripts"
 )
