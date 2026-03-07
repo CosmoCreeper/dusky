@@ -111,7 +111,6 @@ if ! declare -p pkgs_productivity >/dev/null 2>&1; then
     "gst-plugins-good"
     "nemo-pastebin"
     # "nemo-terminal"
-    "papirus-icon-theme-git"
   )
 fi
 
