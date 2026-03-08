@@ -1014,7 +1014,8 @@ get_available_bytes() {
     local -a lines=()
     local available_bytes=0
 
-    mapfile -t lines < <(df -PB1 --output=avail -- "$path" 2>/dev/null || true)
+    # Removed the conflicting -P flag. -B1 works perfectly with --output=avail.
+    mapfile -t lines < <(df -B1 --output=avail -- "$path" 2>/dev/null || true)
     if ((${#lines[@]} >= 2)); then
         available_bytes="${lines[1]//[^0-9]/}"
     fi
@@ -1582,7 +1583,10 @@ git_head_path_meta() {
 # ==============================================================================
 capture_tracked_changes_manifest() {
     local -a raw_records=()
-    local record="" meta="" path="" oldmode="" newmode="" oldoid="" newoid="" status=""
+    local meta="" path="" oldmode="" newmode="" oldoid="" newoid="" status=""
+    local -i i=0
+    local -i count=0
+    local -i parsed_count=0
 
     CHANGE_PATHS=()
     CHANGE_STATUS=()
@@ -1593,20 +1597,43 @@ capture_tracked_changes_manifest() {
     "${GIT_CMD[@]}" update-index -q --refresh >/dev/null 2>&1 || true
     mapfile -d '' -t raw_records < <("${GIT_CMD[@]}" diff-index --raw --no-renames -z HEAD -- 2>/dev/null || true)
 
-    for record in "${raw_records[@]}"; do
-        [[ "$record" == *$'\t'* ]] || continue
-        meta="${record%%$'\t'*}"
-        path="${record#*$'\t'}"
+    count="${#raw_records[@]}"
+    
+    # Process the NUL-separated array in pairs (Metadata -> Path)
+    while (( i < count )); do
+        meta="${raw_records[i]}"
+        path="${raw_records[i+1]:-}"
+        (( i += 2 ))
+
+        # mapfile often leaves a trailing empty element when parsing NUL-terminated output
+        [[ -n "$meta" ]] || continue
+
+        # Git diff-index raw metadata format: :100644 100644 e69de29... 0000000... M
         read -r oldmode newmode oldoid newoid status <<< "${meta#:}"
         status="${status%%[0-9]*}"
 
         [[ -n "$path" ]] || continue
+        
         CHANGE_PATHS+=("$path")
         CHANGE_STATUS["$path"]="$status"
         CHANGE_OLD_MODE["$path"]="$oldmode"
         CHANGE_OLD_OID["$path"]="$oldoid"
         CHANGE_BACKUP_HAS_FILE["$path"]=0
+        
+        (( parsed_count++ ))
     done
+
+    # ---------------------------------------------------------
+    # THE FAIL-CLOSED SANITY CHECK
+    # ---------------------------------------------------------
+    # If Git output contained data (count > 1) but we failed to parse 
+    # a single valid path, the parsing logic is mismatched with Git's output.
+    if (( count > 1 && parsed_count == 0 )); then
+        log ERROR "Git reported tracked changes, but the engine failed to parse them."
+        log ERROR "Raw Git output length: $count items."
+        log ERROR "FATAL: Aborting to prevent accidental data wipe during reset."
+        return 1
+    fi
 
     return 0
 }
