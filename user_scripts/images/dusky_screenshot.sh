@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# HYPRLAND SCREENSHOT ARCHITECTURE (SATTY OPTIMIZED)
-# Bash 5.3+ | Atomic flock IPC | Daemon Capability Polling
+# HYPRLAND SCREENSHOT ARCHITECTURE (THE UNBREAKABLE MASTER v5)
+# Bash 5.3+ | Atomic IPC | Smart Click-Math | Perfect Opaque Freezing
 # ==============================================================================
 
 set -euo pipefail
@@ -12,14 +12,18 @@ readonly PREFIX="screenshot"
 readonly BASE_PICS=$(xdg-user-dir PICTURES 2>/dev/null || echo "$HOME/Pictures")
 readonly SAVE_DIR="${BASE_PICS}/Screenshots"
 
-MODE="region"
+# State variables
+MODE="smart"
 declare -i COPY_CLIP=1
 declare -i NOTIFY=1
 declare -i ANNOTATE=0
+declare -i FREEZE=0
 declare -i HAS_ACTION_SUPPORT=0
+
 SELECTION=""
 TEMP_FILE=""
 SATTY_TOOL=""
+FREEZE_PID=""
 
 # --- 1. ARGUMENT PARSING ---
 while (($# > 0)); do
@@ -27,16 +31,22 @@ while (($# > 0)); do
         -f|--fullscreen)   MODE="fullscreen"; shift ;;
         -r|--region)       MODE="region"; shift ;;
         -w|--window)       MODE="window"; shift ;;
+        -s|--smart)        MODE="smart"; shift ;;
+        -fz|--freeze)      FREEZE=1; shift ;;
         -a|--annotate)     ANNOTATE=1; shift ;;
-        -t|--tool)         SATTY_TOOL="$2"; ANNOTATE=1; shift 2 ;; # Auto-enables annotation
+        -t|--tool)         
+            if (($# < 2)); then echo "Fatal: --tool requires a value." >&2; exit 1; fi
+            SATTY_TOOL="$2"; ANNOTATE=1; shift 2 ;;
         --no-copy)         COPY_CLIP=0; shift ;;
         --no-notify)       NOTIFY=0; shift ;;
         -h|--help)
             cat <<EOF
 Usage: $SCRIPT_NAME [OPTIONS]
+  -s, --smart        Smart Mode: Drag to select, click to snap to window (Default)
   -f, --fullscreen   Capture the entire screen
   -r, --region       Draw a rectangle to capture
   -w, --window       Select a specific window
+  -fz, --freeze      Freeze the screen while selecting
   -a, --annotate     Open Satty immediately after capturing
   -t, --tool <tool>  Open Satty with specific tool (arrow, blur, text, etc.)
   --no-copy          Do not copy to the clipboard
@@ -53,10 +63,11 @@ mkdir -p "$SAVE_DIR"
 declare -a REQ_CMDS=("grim" "flock")
 (( COPY_CLIP )) && REQ_CMDS+=("wl-copy")
 (( NOTIFY ))    && REQ_CMDS+=("notify-send")
+(( ANNOTATE ))  && REQ_CMDS+=("satty")
+(( FREEZE ))    && REQ_CMDS+=("hyprpicker")
 
 [[ "$MODE" == "region" ]] && REQ_CMDS+=("slurp")
-[[ "$MODE" == "window" ]] && REQ_CMDS+=("slurp" "hyprctl" "jq")
-(( ANNOTATE )) && REQ_CMDS+=("satty")
+[[ "$MODE" == "window" || "$MODE" == "smart" ]] && REQ_CMDS+=("slurp" "hyprctl" "jq")
 
 for cmd in "${REQ_CMDS[@]}"; do
     command -v "$cmd" >/dev/null || { echo "Fatal: Missing dependency '$cmd'" >&2; exit 1; }
@@ -73,46 +84,123 @@ fi
 
 cleanup() {
     [[ -n "${TEMP_FILE:-}" && -f "$TEMP_FILE" ]] && rm -f "$TEMP_FILE"
+    [[ -n "${FREEZE_PID:-}" ]] && kill "$FREEZE_PID" 2>/dev/null || true
 }
 trap cleanup EXIT
+
+freeze_screen() {
+    if (( FREEZE )); then
+        hyprpicker -r -z >/dev/null 2>&1 &
+        FREEZE_PID=$!
+        sleep 0.12 
+    fi
+}
+
+unfreeze_screen() {
+    if [[ -n "${FREEZE_PID:-}" ]]; then
+        kill "$FREEZE_PID" 2>/dev/null || true
+        FREEZE_PID=""
+    fi
+}
+
+get_visible_clients() {
+    local active_ws
+    active_ws=$(hyprctl -j monitors | jq -c '[.[] | .activeWorkspace.name, .specialWorkspace.name | select(. != "")] | unique') || return 1
+    
+    hyprctl -j clients | jq -r --argjson ws "$active_ws" '
+        [.[] | select(.mapped and (.hidden | not) and .size[0] > 0 and .size[1] > 0)
+        | select(.workspace.name as $w | $ws | index($w))]
+        | sort_by(.size[0] * .size[1])
+        | .[] | "\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"
+    ' || return 1
+}
 
 # --- 3. SELECTION LOGIC ---
 case "$MODE" in
     region)
+        freeze_screen
         set +e
         SELECTION=$(slurp)
         STATUS=$?
         set -e
+        
         [[ $STATUS -eq 1 ]] && exit 0 
         [[ $STATUS -ne 0 ]] && { echo "Fatal: Slurp failed." >&2; exit 1; }
         [[ -z "$SELECTION" ]] && exit 0
         ;;
     window)
-        WINDOW_DATA=$(hyprctl -j clients | jq -r '
-            .[] | select(.mapped and (.hidden | not) and .size[0] > 0 and .size[1] > 0)
-            | "\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"
-        ') || { echo "Fatal: Failed to query Hyprland socket." >&2; exit 1; }
-
-        [[ -z "$WINDOW_DATA" ]] && exit 0 
+        freeze_screen # Moved freeze to the top!
+        CLIENTS=$(get_visible_clients) || { echo "Fatal: Failed to query clients." >&2; exit 1; }
+        [[ -z "$CLIENTS" ]] && exit 0 
 
         set +e
-        SELECTION=$(slurp -r <<< "$WINDOW_DATA")
+        SELECTION=$(slurp -r <<< "$CLIENTS")
         STATUS=$?
         set -e
+        
         [[ $STATUS -eq 1 ]] && exit 0 
         [[ $STATUS -ne 0 ]] && { echo "Fatal: Slurp failed." >&2; exit 1; }
         [[ -z "$SELECTION" ]] && exit 0
         ;;
+    smart)
+        freeze_screen # Moved freeze to the top!
+        CLIENTS=$(get_visible_clients) || { echo "Fatal: Failed to query clients." >&2; exit 1; }
+        
+        MONITORS=$(hyprctl -j monitors | jq -r '
+            def format_geo: .x as $x | .y as $y | (.width / .scale | floor) as $w | (.height / .scale | floor) as $h | .transform as $t | if ($t % 2) == 1 then "\($x),\($y) \($h)x\($w)" else "\($x),\($y) \($w)x\($h)" end;
+            .[] | format_geo
+        ') || { echo "Fatal: Failed to query monitors." >&2; exit 1; }
+        
+        RECTS=$(printf "%s\n%s" "$CLIENTS" "$MONITORS")
+
+        set +e
+        SELECTION=$(slurp <<< "$RECTS")
+        STATUS=$?
+        set -e
+
+        [[ $STATUS -eq 1 ]] && exit 0 
+        [[ $STATUS -ne 0 ]] && { echo "Fatal: Slurp failed." >&2; exit 1; }
+        [[ -z "$SELECTION" ]] && exit 0
+
+        if [[ $SELECTION =~ ^(-?[0-9]+),(-?[0-9]+)[[:space:]]([0-9]+)x([0-9]+)$ ]]; then
+            w=$((10#${BASH_REMATCH[3]}))
+            h=$((10#${BASH_REMATCH[4]}))
+            
+            if (( w * h < 20 )); then
+                cx=${BASH_REMATCH[1]}
+                cy=${BASH_REMATCH[2]}
+                
+                while IFS= read -r rect; do
+                    [[ -z "$rect" ]] && continue
+                    if [[ $rect =~ ^(-?[0-9]+),(-?[0-9]+)[[:space:]]([0-9]+)x([0-9]+) ]]; then
+                        rx=${BASH_REMATCH[1]}
+                        ry=${BASH_REMATCH[2]}
+                        rw=$((10#${BASH_REMATCH[3]}))
+                        rh=$((10#${BASH_REMATCH[4]}))
+                        
+                        if (( cx >= rx && cx < rx + rw && cy >= ry && cy < ry + rh )); then
+                            SELECTION="${rx},${ry} ${rw}x${rh}"
+                            break
+                        fi
+                    fi
+                done <<< "$RECTS"
+            fi
+        fi
+        ;;
 esac
 
-# --- 4. CAPTURE ---
+# --- 4. CAPTURE & UNFREEZE ---
 TEMP_FILE=$(mktemp --tmpdir="$SAVE_DIR" ".${PREFIX}.XXXXXX.png")
 
 if [[ "$MODE" == "fullscreen" ]]; then
     grim "$TEMP_FILE" || { echo "Fatal: Grim capture failed." >&2; exit 1; }
 else
+    # grim captures the frozen hyprpicker layer, ensuring menus remain opaque
     grim -g "$SELECTION" "$TEMP_FILE" || { echo "Fatal: Grim capture failed." >&2; exit 1; }
 fi
+
+# We safely kill the freeze layer ONLY AFTER the picture is taken
+unfreeze_screen 
 
 # --- 5. ATOMIC FLOCK IPC & PUBLISHING ---
 readonly LOCK_FILE="${SAVE_DIR}/.${PREFIX}.lock"
@@ -147,7 +235,6 @@ flock -u "$lock_fd"
 exec {lock_fd}>&-
 
 # --- 6. ANNOTATION HANDLER ---
-# We build the satty command dynamically to include tools and suppress double-notifications
 run_satty() {
     local -a satty_args=("--filename" "$FILE_PATH" "--output-filename" "$FILE_PATH" "--early-exit" "--disable-notifications")
     [[ -n "$SATTY_TOOL" ]] && satty_args+=("--initial-tool" "$SATTY_TOOL")
