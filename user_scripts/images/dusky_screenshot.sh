@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# HYPRLAND SCREENSHOT ARCHITECTURE (THE UNBREAKABLE MASTER v7)
+# HYPRLAND SCREENSHOT ARCHITECTURE (THE UNBREAKABLE MASTER v9)
 # Bash 5.3+ | Atomic IPC | Smart Click-Math | Perfect Freeze | Stacking Fix
 # ==============================================================================
 
@@ -14,6 +14,8 @@ readonly SAVE_DIR="${BASE_PICS}/Screenshots"
 
 # State variables
 MODE="smart"
+FULLSCREEN_MODE="focused" # Options: "focused" (current monitor) or "all" (every monitor)
+
 declare -i COPY_CLIP=1
 declare -i NOTIFY=1
 declare -i ANNOTATE=0
@@ -43,7 +45,7 @@ while (($# > 0)); do
             cat <<EOF
 Usage: $SCRIPT_NAME [OPTIONS]
   -s, --smart        Smart Mode: Drag to select, click to snap to window (Default)
-  -f, --fullscreen   Capture the entire screen
+  -f, --fullscreen   Capture screen (controlled by FULLSCREEN_MODE config)
   -r, --region       Draw a rectangle to capture
   -w, --window       Select a specific window
   -fz, --freeze      Freeze the screen while selecting
@@ -68,6 +70,7 @@ declare -a REQ_CMDS=("grim")
 
 [[ "$MODE" == "region" ]] && REQ_CMDS+=("slurp")
 [[ "$MODE" == "window" || "$MODE" == "smart" ]] && REQ_CMDS+=("slurp" "hyprctl" "jq")
+[[ "$MODE" == "fullscreen" && "$FULLSCREEN_MODE" == "focused" ]] && REQ_CMDS+=("hyprctl" "jq")
 
 for cmd in "${REQ_CMDS[@]}"; do
     command -v "$cmd" >/dev/null || { echo "Fatal: Missing dependency '$cmd'" >&2; exit 1; }
@@ -123,6 +126,15 @@ get_visible_clients() {
 
 # --- 5. SELECTION LOGIC ---
 case "$MODE" in
+    fullscreen)
+        if [[ "$FULLSCREEN_MODE" == "focused" ]]; then
+            SELECTION=$(hyprctl -j monitors | jq -r '
+                def format_geo: .x as $x | .y as $y | (.width / .scale | floor) as $w | (.height / .scale | floor) as $h | .transform as $t | if ($t % 2) == 1 then "\($x),\($y) \($h)x\($w)" else "\($x),\($y) \($w)x\($h)" end;
+                .[] | select(.focused == true) | format_geo
+            ') || { echo "Fatal: Failed to query monitors." >&2; exit 1; }
+            [[ -z "$SELECTION" ]] && exit 0
+        fi
+        ;;
     region)
         freeze_screen
         set +e
@@ -198,7 +210,7 @@ esac
 # --- 6. CAPTURE & UNFREEZE ---
 TEMP_FILE=$(mktemp --tmpdir="$SAVE_DIR" ".${PREFIX}.XXXXXX.png")
 
-if [[ "$MODE" == "fullscreen" ]]; then
+if [[ "$MODE" == "fullscreen" && "$FULLSCREEN_MODE" == "all" ]]; then
     grim "$TEMP_FILE" || { echo "Fatal: Grim capture failed." >&2; exit 1; }
 else
     grim -g "$SELECTION" "$TEMP_FILE" || { echo "Fatal: Grim capture failed." >&2; exit 1; }
