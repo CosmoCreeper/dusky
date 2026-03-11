@@ -9,6 +9,7 @@
 
 set -euo pipefail
 export LC_NUMERIC=C LC_COLLATE=C
+shopt -s extglob
 
 # =============================================================================
 # CONFIGURATION
@@ -784,21 +785,31 @@ nav_edge() {
 }
 
 handle_mouse() {
-    local seq=$1
-    local re='^\[<([0-9]+);[0-9]+;([0-9]+)([Mm])$'
-    [[ $seq =~ $re ]] || return 0
+    local seq="$1"
+    if [[ "$seq" =~ ^\[\<([0-9]+)\;([0-9]+)\;([0-9]+)([Mm])$ ]]; then
+        local -i btn="${BASH_REMATCH[1]}"
+        local -i col="${BASH_REMATCH[2]}"
+        local -i row="${BASH_REMATCH[3]}"
+        local act="${BASH_REMATCH[4]}"
 
-    local -i btn=${BASH_REMATCH[1]} row=${BASH_REMATCH[2]}
-    local act=${BASH_REMATCH[3]}
-
-    case $btn in
-        64) nav_step -1; return ;;
-        65) nav_step 1; return ;;
-    esac
-
-    [[ $act == M ]] || return
-    local -i idx=$(( row - ITEM_START_ROW - 1 + SCROLL_OFFSET ))
-    (( idx >= 0 && idx < TOTAL_COMMITS )) && SELECTED_ROW=$idx
+        if [[ "$act" == "M" ]]; then
+            case $btn in
+                0) # Left click
+                    local -i idx=$(( row - ITEM_START_ROW - 1 ))
+                    
+                    if (( idx >= 0 && idx < TOTAL_COMMITS )); then
+                        SELECTED_ROW=$idx
+                    fi
+                    ;;
+                64) # Scroll Up
+                    nav_step -1
+                    ;;
+                65) # Scroll Down
+                    nav_step 1
+                    ;;
+            esac
+        fi
+    fi
 }
 
 # =============================================================================
@@ -841,37 +852,58 @@ main() {
         IFS= read -rsn1 key || break
 
         if (( ! ui_ok )); then
-            case $key in
+            case "$key" in
                 q|Q|$'\x03') break ;;
                 *) continue ;;
             esac
         fi
 
-        if [[ $key == $'\e' ]]; then
+        if [[ "$key" == $'\e' ]]; then
             seq=''
             while IFS= read -rsn1 -t 0.05 ch; do
                 seq+="$ch"
             done
-            case $seq in
-                '')          break ;;
-                '[A'|OA)     nav_step -1 ;;
-                '[B'|OB)     nav_step 1 ;;
-                '[5~')       nav_page -1 ;;
-                '[6~')       nav_page 1 ;;
-                '[H'|'[1~')  nav_edge home ;;
-                '[F'|'[4~')  nav_edge end ;;
-                '['*'<'*)    handle_mouse "$seq" ;;
-            esac
-        else
-            case $key in
-                k|K)         nav_step -1 ;;
-                j|J)         nav_step 1 ;;
-                g)           nav_edge home ;;
-                G)           nav_edge end ;;
-                q|Q|$'\x03') break ;;
-            esac
+            
+            if [[ -z "$seq" ]]; then
+                key="ESC"
+            else
+                case "$seq" in
+                    '[A'|OA)     nav_step -1 ;;
+                    '[B'|OB)     nav_step 1 ;;
+                    '[5~')       nav_page -1 ;;
+                    '[6~')       nav_page 1 ;;
+                    '[H'|'[1~')  nav_edge home ;;
+                    '[F'|'[4~')  nav_edge end ;;
+                    '['*'<'+([0-9])';'+([0-9])';'+([0-9])+([Mm]))
+                        handle_mouse "$seq"
+                        ;;
+                    *)
+                        continue
+                        ;;
+                esac
+                continue
+            fi
         fi
+
+        case "$key" in
+            q|Q|$'\x03'|ESC) 
+                break 
+                ;;
+            k|K) 
+                nav_step -1 
+                ;;
+            j|J) 
+                nav_step 1 
+                ;;
+            g)   
+                nav_edge home 
+                ;;
+            G)   
+                nav_edge end 
+                ;;
+            $'\n')
+                ;;
+        esac
     done
 }
-
-main
+main "$@"
