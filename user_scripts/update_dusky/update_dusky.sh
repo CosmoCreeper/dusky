@@ -510,18 +510,8 @@ join_quoted_argv() {
     printf '%s' "${out% }"
 }
 
-_strip_ansi() {
-    local str=$1
-    local -n _out_ref=$2
-    # ANSI C quoting translates \e to literal ESC and \\[ to literal \[
-    local ansi_re=$'^([^\e]*)\e\\[[0-9;]*m(.*)$'
-
-    _out_ref=''
-    while [[ $str =~ $ansi_re ]]; do
-        _out_ref+="${BASH_REMATCH[1]}"
-        str="${BASH_REMATCH[2]}"
-    done
-    _out_ref+="$str"
+strip_ansi() {
+    REPLY="${1//$'\033'\[*([0-9;:?<=>])@([@A-Z\[\\\]^_\`a-z\{|\}~])/}"
 }
 
 log() {
